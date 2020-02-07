@@ -20,6 +20,9 @@ pub use crate::addr::*;
 mod route;
 pub use crate::route::*;
 
+mod qdisc;
+pub use crate::qdisc::*;
+
 mod connection;
 pub use crate::connection::*;
 

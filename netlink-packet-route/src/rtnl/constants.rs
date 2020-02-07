@@ -646,3 +646,7 @@ pub const NDA_IFINDEX: u16 = 8;
 pub const NDA_MASTER: u16 = 9;
 pub const NDA_LINK_NETNSID: u16 = 10;
 pub const NDA_SRC_VNI: u16 = 11;
+
+pub const TC_H_INGRESS: u32 = 0xfffffff1;
+pub const TC_H_CLSACT: u32 = TC_H_INGRESS;
+pub const TC_H_ROOT: u32 = 0xffffffff;
