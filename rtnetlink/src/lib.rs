@@ -23,6 +23,9 @@ pub use crate::route::*;
 mod qdisc;
 pub use crate::qdisc::*;
 
+mod filter;
+pub use crate::filter::*;
+
 mod connection;
 pub use crate::connection::*;
 

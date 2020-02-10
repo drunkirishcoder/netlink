@@ -7,10 +7,14 @@ pub use self::stats_queue::*;
 mod stats_basic;
 pub use self::stats_basic::*;
 
+use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
+use std::mem::size_of;
+
 use crate::{
     constants::*,
     nlas::{self, DefaultNla, NlaBuffer, NlasIterator},
-    parsers::{parse_string, parse_u8},
+    parsers::{parse_string, parse_u32, parse_u8},
     traits::{Emitable, Parseable},
     DecodeError,
 };
@@ -173,6 +177,70 @@ impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<NlaBuffer<&'a T>> for Stats2 {
             TCA_STATS_APP => Self::StatsApp(payload.to_vec()),
             TCA_STATS_BASIC => Self::StatsBasic(payload.to_vec()),
             TCA_STATS_QUEUE => Self::StatsQueue(payload.to_vec()),
+            _ => Self::Other(DefaultNla::parse(buf)?),
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Bpf {
+    Classid(u32),
+    Fd(u32),
+    Name(String),
+    Flags(u32),
+    Other(DefaultNla),
+}
+
+impl nlas::Nla for Bpf {
+    fn value_len(&self) -> usize {
+        use self::Bpf::*;
+        match *self {
+            Classid(_) | Fd(_) | Flags(_) => size_of::<u32>(),
+            Name(ref string) => string.as_bytes().len() + 1,
+            Other(ref nla) => nla.value_len(),
+        }
+    }
+
+    fn emit_value(&self, buffer: &mut [u8]) {
+        use self::Bpf::*;
+        match *self {
+            Classid(ref value) | Fd(ref value) | Flags(ref value) => {
+                NativeEndian::write_u32(buffer, *value)
+            }
+            Name(ref string) => {
+                buffer[..string.len()].copy_from_slice(string.as_bytes());
+                buffer[string.len()] = 0;
+            }
+            Other(ref nla) => nla.emit_value(buffer),
+        }
+    }
+
+    fn kind(&self) -> u16 {
+        use self::Bpf::*;
+        match *self {
+            Classid(_) => TCA_BPF_CLASSID,
+            Fd(_) => TCA_BPF_FD,
+            Name(_) => TCA_BPF_NAME,
+            Flags(_) => TCA_BPF_FLAGS,
+            Other(ref nla) => nla.kind(),
+        }
+    }
+}
+
+impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<NlaBuffer<&'a T>> for Bpf {
+    fn parse(buf: &NlaBuffer<&'a T>) -> Result<Self, DecodeError> {
+        let payload = buf.value();
+        Ok(match buf.kind() {
+            TCA_BPF_CLASSID => {
+                Self::Classid(parse_u32(payload).context("invalid TCA_BPF_CLASSID value")?)
+            }
+            TCA_BPF_FD => Self::Fd(parse_u32(payload).context("invalid TCA_BPF_FD value")?),
+            TCA_BPF_NAME => {
+                Self::Name(parse_string(payload).context("invalid TCA_BPF_NAME value")?)
+            }
+            TCA_BPF_FLAGS => {
+                Self::Flags(parse_u32(payload).context("invalid TCA_BPF_FLAGS value")?)
+            }
             _ => Self::Other(DefaultNla::parse(buf)?),
         })
     }
